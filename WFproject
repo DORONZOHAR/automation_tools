@@ -1,0 +1,93 @@
+#!/bin/bash
+echo "Please enter a memory file or an image file:" #make sure you are inside the directory of the file
+read File
+function bwalk() #use binwalk to extract data from the file
+{   
+	echo "[+] Extracting Binwalk data *****************..............."
+	binwalk  $File > binwalkfile
+}
+function str() #use strings to extract human readable characters from the file
+{ 
+	echo "[+] Extracting Strings from the file *****************..............."
+	strings $File > stringsfile
+}
+
+function fore() #use foremost to extract data from the file
+{ 
+	  echo "[+] Extracting Foremost data *****************..............."
+	foremost $File -t all -o fore -Q
+}
+
+function bulk() #use bulk_extractor to extract data from the file
+{
+    echo "[+] Extracting Bulk_xtractor data *****************..............."
+	bulk_extractor $File -o bulk -q
+}
+
+function vol() #use volatility to extract data from the file. make sure that you have the volatility tool in the directory before execute. 
+#link for download - https://www.volatilityfoundation.org/releases
+{
+	echo "[+] Extracting volatility data *****************..............."
+./vol1 -f $File imageinfo > profile-vol	
+OS=$(cat profile-vol | awk '{print $4}' | head -n1 | awk -F ',' '{print $1}') #represents the operating system of the file
+
+VOLDATA="pslist pstree userassist sockets" #represents the commands of volatility that we want to use, see more at https://github.com/volatilityfoundation/volatility/wiki/Command-Reference
+for i in $VOLDATA
+do
+echo "[+] Extracting $i data *****************..............."
+./vol1 -f $File --profile=$OS $i > vol-$i
+done
+}
+
+function log()
+{
+    mkdir carved-$File
+    mv binwalkfile stringsfile fore bulk profile-vol vol-* carved-$File
+    cd carved-$File
+    echo
+    echo "----------------------------------------------------------------------------------------------------------------"
+    echo "*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+"
+    echo
+	echo "[*+*] All the information extrcted to a new directory called: carved-$File"
+	echo "[*] The number of text files is $(find . -type f -name '*.txt'|wc -l)"
+	echo "[*] The number of executable files is $(find . -type f -name '*.exe'|wc -l)"
+	echo "[*] The number of png files is $(find . -type f -name '*.png'|wc -l)"
+	echo "[*] The number of pcap files is $(find . -type f -name '*.pcap'|wc -l)"
+	echo "[*] The number of jpeg files is $(find . -type f -name '*.jpeg'|wc -l)"
+	echo "[*] The number of zip files is $(find . -type f -name '*.zip'|wc -l)"
+	echo "[*] The number of doc files is $(find . -type f -name '*.doc'|wc -l)"
+	echo
+	echo "YOU ARE WELCOME TO CHECK IT OUT!"
+	sleep 0.5
+}
+	
+echo "Select M(memory file) I(image file)" #specify file type 
+read choose
+case $choose in 
+M)
+  echo "$File is a memory file"
+  echo "Extracting data starts..... *******************"
+  echo
+  echo "+++++++++++++++++++++++++++++++++++++++++++++++"
+ 
+bulk
+bwalk
+fore
+str
+vol
+log
+;;
+
+I)
+  echo "$File is a image file"
+  echo "Extracting data starts..... *******************"
+  echo "+++++++++++++++++++++++++++++++++++++++++++++++"
+ 
+bulk
+bwalk
+fore	
+str
+log
+;;
+
+  esac

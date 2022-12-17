@@ -1,0 +1,63 @@
+#!/bin/bash
+function instll ()
+{
+#Install relevant applications on the local computer
+sudo apt-get update -y 
+sudo apt-get install espeak -y 
+sudo apt-get install cupp -y 
+sudo apt-get install geoiplookup -y 
+sudo apt-get install sshd -y 
+sudo apt-get install vsftpd -y 
+sudo apt-get install apache2 -y 
+sudo apt-get install hydra -y
+sudo apt-get install wireshark -y
+sudo apt-get install sshpass -y
+sudo apt-get install nmap -y
+git clone https://github.com/htrgouvea/nipe && cd nipe #install for nipe, from : https://github.com/htrgouvea/nipe
+sudo cpan install Try::Tiny Config::Simple JSON 
+sudo perl nipe.pl install -y 
+}
+
+function anon () #Check if the connection is anonymous
+{
+IP=$(curl -s ifconfig.me) 
+if [ "$(geoiplookup $IP | awk '{print $4}' |sed 's/,//g')" == "IL" ]
+then 
+echo
+	echo "[***]You are not anonymous, starting anonymous process"
+		#start nipe service
+		cd nipe	
+		sudo perl nipe.pl restart
+		echo
+		sudo perl nipe.pl status #check the status (if active)
+else
+	echo
+	echo "[***]You are anonymous, starting the attack"			
+fi	
+} 
+
+function vps () # communicate via SSH and execute nmap scans and whois queries.
+{
+echo "Enter ip of ssh server" 
+read IP
+echo "Enter username of ssh server"
+read USER
+echo "Enter password of ssh server "
+read PASS
+echo "Enter an ip or ip range for scan" 
+read RNG
+echo
+echo
+echo	
+sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no $USER@$IP "geoiplookup $RNG"	#checking ip country
+echo
+sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no $USER@$IP "nmap $RNG -Pn -sV"  #nmap scan and version check
+}
+instll
+anon
+vps	
+	
+	
+
+
+		
